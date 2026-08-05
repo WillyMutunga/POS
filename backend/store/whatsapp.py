@@ -1,5 +1,6 @@
 import os
-import requests
+import urllib.request
+import json
 from pathlib import Path
 
 def get_whatsapp_env():
@@ -33,11 +34,15 @@ def send_whatsapp_message(phone: str, message: str) -> dict:
     payload = {'messaging_product': 'whatsapp', 'recipient_type': 'individual', 'to': phone, 'type': 'text', 'text': {'preview_url': False, 'body': message}}
     
     try:
-        response = requests.post(url, headers=headers, json=payload)
-        res_data = response.json()
-        if response.status_code in [200, 201]:
-            return {'status': 'SUCCESS', 'data': res_data}
-        else:
-            return {'status': 'ERROR', 'message': res_data.get('error', {}).get('message', 'Unknown Meta Error')}
+        req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
+        with urllib.request.urlopen(req) as response:
+            res_data = json.loads(response.read().decode('utf-8'))
+            if response.status in [200, 201]:
+                return {'status': 'SUCCESS', 'data': res_data}
+            else:
+                return {'status': 'ERROR', 'message': res_data.get('error', {}).get('message', 'Unknown Meta Error')}
+    except urllib.error.HTTPError as e:
+        err_data = json.loads(e.read().decode('utf-8'))
+        return {'status': 'ERROR', 'message': err_data.get('error', {}).get('message', str(e))}
     except Exception as e:
         return {'status': 'ERROR', 'message': str(e)}
