@@ -6,7 +6,6 @@ import ssl
 from pathlib import Path
 
 def get_casamoko_env():
-    # Read the .env file directly for the latest keys
     env_vars = {}
     env_path = Path(__file__).resolve().parent.parent / '.env'
     if env_path.exists():
@@ -15,20 +14,19 @@ def get_casamoko_env():
                 line = line.strip()
                 if line and not line.startswith('#') and '=' in line:
                     k, v = line.split('=', 1)
-                    # Strip spaces and quotes
                     env_vars[k.strip()] = v.strip().strip('"' + "'")
                     
     api_key = env_vars.get("CASAMOKO_API_KEY") or os.getenv("CASAMOKO_API_KEY")
     api_url = env_vars.get("CASAMOKO_API_URL") or os.getenv("CASAMOKO_API_URL", "https://casamoko.co.ke/api/v1/sms/send")
     default_sender = env_vars.get("CASAMOKO_DEFAULT_SENDER") or os.getenv("CASAMOKO_DEFAULT_SENDER", "CASAMOKO")
     
-    return api_key, api_url, default_sender
+    return api_key, api_url, default_sender, str(env_path), env_path.exists()
 
 def send_sms(phone: str, message: str, sender_id: str = None) -> dict:
     """
     Dispatches SMS via Casamoko REST API using dynamic .env parsing
     """
-    api_key, api_url, default_sender = get_casamoko_env()
+    api_key, api_url, default_sender, env_path_str, env_exists = get_casamoko_env()
     
     if sender_id is None:
         sender_id = default_sender
@@ -36,7 +34,7 @@ def send_sms(phone: str, message: str, sender_id: str = None) -> dict:
     if not api_key or api_key == 'YOUR_API_KEY_HERE':
         return {
             "status": "ERROR", 
-            "message": "API Key is missing. Please set CASAMOKO_API_KEY in .env"
+            "message": f"API Key is missing. Looked in {env_path_str} (Exists: {env_exists})"
         }
         
     payload = {
