@@ -6,9 +6,9 @@ services:
     container_name: sparks_bytes_db
     restart: always
     environment:
-      POSTGRES_DB: sparks_bytes
+      POSTGRES_DB: lightspos
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: William#20
     ports:
       - "5432:5432"
     volumes:

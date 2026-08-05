@@ -5,8 +5,9 @@ import { UserPlus, Shield, Key, EyeOff, Save } from 'lucide-react';
 export default function UserManagementModule({ onAddLog }) {
   const [users, setUsers] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   
-  // Create user fields
+  // Create/Edit user fields
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
   const [role, setRole] = useState('cashier');
@@ -24,20 +25,52 @@ export default function UserManagementModule({ onAddLog }) {
     }
   };
 
+  const openModalForNew = () => {
+    setEditingId(null);
+    setName('');
+    setPin('');
+    setRole('cashier');
+    setIsModalOpen(true);
+  };
+
+  const openModalForEdit = (u) => {
+    setEditingId(u.id);
+    setName(u.name);
+    setPin(u.pin);
+    setRole(u.role);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete ${name}?`)) return;
+    try {
+      await api.deleteUser(id);
+      onAddLog('USER_DELETE', `Deleted store user profile: ${name}`);
+      loadUsers();
+    } catch (err) {
+      alert(`Delete failed: ${err.message}`);
+    }
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     if (!name || !pin) return;
 
     try {
-      await api.createUser({ name, pin, role });
-      onAddLog('USER_CREATE', `Created store user profile: ${name} (Role: ${role})`);
+      if (editingId) {
+        await api.updateUser(editingId, { name, pin, role });
+        onAddLog('USER_UPDATE', `Updated store user profile: ${name} (Role: ${role})`);
+      } else {
+        await api.createUser({ name, pin, role });
+        onAddLog('USER_CREATE', `Created store user profile: ${name} (Role: ${role})`);
+      }
       setIsModalOpen(false);
       setName('');
       setPin('');
       setRole('cashier');
       loadUsers();
     } catch (err) {
-      alert(`User creation failed: ${err.message}`);
+      alert(`User save failed: ${err.message}`);
     }
   };
 
@@ -51,7 +84,7 @@ export default function UserManagementModule({ onAddLog }) {
           <p className="cyber-subtitle">Set Cashier/Manager access PIN codes and security groups.</p>
         </div>
 
-        <button className="cyber-button btn-lime" onClick={() => setIsModalOpen(true)}>
+        <button className="cyber-button btn-lime" onClick={openModalForNew}>
           <UserPlus size={16} /> Add User
         </button>
       </div>
@@ -69,6 +102,7 @@ export default function UserManagementModule({ onAddLog }) {
                   <th>Staff Name</th>
                   <th style={{ textAlign: 'center' }}>Role Security</th>
                   <th style={{ textAlign: 'center' }}>Authorization PIN</th>
+                  <th style={{ textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -82,7 +116,17 @@ export default function UserManagementModule({ onAddLog }) {
                     </td>
                     <td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', color: 'var(--text-muted)' }}>
-                        <EyeOff size={12} /> LOCKED
+                        <EyeOff size={12} /> {u.pin}
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
+                        <button className="cyber-button" style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }} onClick={() => openModalForEdit(u)}>
+                          Edit
+                        </button>
+                        <button className="cyber-button btn-orange" style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }} onClick={() => handleDelete(u.id, u.name)}>
+                          Del
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -154,7 +198,7 @@ export default function UserManagementModule({ onAddLog }) {
       {isModalOpen && (
         <div className="cyber-modal-overlay">
           <div className="cyber-modal" style={{ maxWidth: '400px' }}>
-            <h3 className="cyber-title" style={{ marginBottom: '1.5rem' }}>Add User Profile</h3>
+            <h3 className="cyber-title" style={{ marginBottom: '1.5rem' }}>{editingId ? 'Edit' : 'Add'} User Profile</h3>
             
             <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
@@ -208,7 +252,7 @@ export default function UserManagementModule({ onAddLog }) {
                   type="submit" 
                   className="cyber-button btn-lime"
                 >
-                  <Save size={14} /> Create
+                  <Save size={14} /> {editingId ? 'Update' : 'Create'}
                 </button>
               </div>
             </form>

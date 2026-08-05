@@ -45,6 +45,13 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(user)
   }),
+  updateUser: (id, user) => request(`/users/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(user)
+  }),
+  deleteUser: (id) => request(`/users/${id}/`, {
+    method: 'DELETE'
+  }),
 
   // Categories
   getCategories: () => request('/categories/'),

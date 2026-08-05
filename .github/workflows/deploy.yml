@@ -1,52 +1,55 @@
-name: Deploy POS System via FTP
+name: Deploy to cPanel FTP
 
 on:
   push:
     branches:
       - main
-      - master
+  workflow_dispatch: # Allows manual trigger
 
 jobs:
-  build-and-deploy:
+  web-deploy:
+    name: Build & Deploy
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+    - name: Get latest code
+      uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
 
-      - name: Build Frontend
-        working-directory: ./frontend
-        run: |
-          npm install
-          npm run build
+    - name: Install dependencies & Build Frontend
+      working-directory: ./frontend
+      run: |
+        npm install
+        npm run build
 
-      - name: Deploy Frontend via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./frontend/dist/
-          server-dir: /pos.casamoko.co.ke/
-          exclude: |
-            **/.git*
-            **/.git*/**
+    # --- DEPLOY FRONTEND ---
+    - name: Sync Frontend Files via FTP
+      uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+      with:
+        server: ${{ secrets.FTP_SERVER }}
+        username: ${{ secrets.FTP_USERNAME }}
+        password: ${{ secrets.FTP_PASSWORD }}
+        local-dir: ./frontend/dist/
+        # IMPORTANT: Change this to the exact folder name where your frontend lives on cPanel!
+        server-dir: ./public_html/lightspos.skysoftsystems.co.ke/
 
-      - name: Deploy Backend via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./backend/
-          server-dir: /pos_backend/
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/venv/**
-            **/__pycache__/**
-            **/*.sqlite3
+    # --- DEPLOY BACKEND ---
+    - name: Sync Backend Files via FTP
+      uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+      with:
+        server: ${{ secrets.FTP_SERVER }}
+        username: ${{ secrets.FTP_USERNAME }}
+        password: ${{ secrets.FTP_PASSWORD }}
+        local-dir: ./backend/
+        # IMPORTANT: Change this to the exact folder name where your backend lives on cPanel!
+        server-dir: ./lightspos_backend/
+        exclude: |
+          **/.env
+          **/db.sqlite3
+          **/venv/**
+          **/.git/**
+          **/__pycache__/**
