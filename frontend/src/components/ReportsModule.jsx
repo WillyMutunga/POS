@@ -3,8 +3,11 @@ import { api } from '../api';
 import { FileText, Printer, ShieldCheck, Download } from 'lucide-react';
 
 export default function ReportsModule({ currentUser }) {
-  const [reportType, setReportType] = useState(currentUser.role === 'admin' ? 'sales' : 'cashier_daily');
+  const [reportType, setReportType] = useState(
+    currentUser.role === 'admin' || currentUser.role === 'manager' ? 'sales' : 'cashier_daily'
+  );
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [inventoryFilter, setInventoryFilter] = useState('all'); // 'all', 'needs_restock', 'out_of_stock', 'low_stock'
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -57,17 +60,81 @@ export default function ReportsModule({ currentUser }) {
     window.print();
   };
 
+  const getFilteredInventory = () => {
+    if (!Array.isArray(reportData)) return [];
+    return reportData
+      .filter(p => {
+        if (inventoryFilter === 'out_of_stock') return p.stock_quantity <= 0;
+        if (inventoryFilter === 'low_stock') return p.stock_quantity > 0 && p.stock_quantity < 10;
+        if (inventoryFilter === 'needs_restock') return p.stock_quantity < 10;
+        return true;
+      })
+      .slice()
+      .sort((a, b) => a.stock_quantity - b.stock_quantity);
+  };
+
+  const handleDownloadInventoryCSV = () => {
+    const items = getFilteredInventory();
+    const headers = [
+      'SKU / Barcode',
+      'Product Name',
+      'Category',
+      'Units in Stock',
+      'Status',
+      'Cost Price (KES)',
+      'Retail Price (KES)',
+      'Asset Valuation (KES)'
+    ];
+    const escapeCsv = (val) => {
+      const str = String(val ?? '');
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+    const rows = items.map(prod => {
+      const status = prod.stock_quantity <= 0 ? 'OUT OF STOCK' : prod.stock_quantity < 10 ? 'LOW STOCK' : 'IN STOCK';
+      const valuation = (Number(prod.cost_price || 0) * Number(prod.stock_quantity || 0)).toFixed(2);
+      return [
+        escapeCsv(prod.barcode),
+        escapeCsv(prod.name),
+        escapeCsv(prod.category_name || ''),
+        prod.stock_quantity,
+        status,
+        Number(prod.cost_price || 0).toFixed(2),
+        Number(prod.retail_price || 0).toFixed(2),
+        valuation
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `inventory_report_${inventoryFilter}_${selectedDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%' }}>
       
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div>
           <h2 className="cyber-title" style={{ fontSize: '1.25rem' }}>Reports Center</h2>
           <p className="cyber-subtitle">Generate exportable audit-ready summaries for store accounting.</p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {reportType === 'inventory' && Array.isArray(reportData) && (
+            <button className="cyber-button btn-lime" onClick={handleDownloadInventoryCSV}>
+              <Download size={14} /> Download Stock CSV
+            </button>
+          )}
           <button className="cyber-button" onClick={handlePrint}>
             <Printer size={14} /> Print Report
           </button>
@@ -78,12 +145,20 @@ export default function ReportsModule({ currentUser }) {
         <div style={{ display: 'flex', gap: '1rem', background: 'var(--bg-dark)', padding: '1rem', borderRadius: '4px', border: '1px solid var(--border-muted)', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
             {(currentUser.role === 'admin' || currentUser.role === 'manager') && (
-              <button 
-                className={`cyber-button ${reportType === 'sales' ? 'btn-lime' : ''}`}
-                onClick={() => setReportType('sales')}
-              >
-                Sales Transactions
-              </button>
+              <>
+                <button 
+                  className={`cyber-button ${reportType === 'sales' ? 'btn-lime' : ''}`}
+                  onClick={() => setReportType('sales')}
+                >
+                  Sales Transactions
+                </button>
+                <button 
+                  className={`cyber-button ${reportType === 'inventory' ? 'btn-lime' : ''}`}
+                  onClick={() => setReportType('inventory')}
+                >
+                  Stock Quantities & Valuation
+                </button>
+              </>
             )}
 
             <button 
@@ -95,12 +170,6 @@ export default function ReportsModule({ currentUser }) {
 
             {currentUser.role === 'admin' && (
               <>
-                <button 
-                  className={`cyber-button ${reportType === 'inventory' ? 'btn-lime' : ''}`}
-                  onClick={() => setReportType('inventory')}
-                >
-                  Inventory Valuation
-                </button>
                 <button 
                   className={`cyber-button ${reportType === 'financial' ? 'btn-lime' : ''}`}
                   onClick={() => setReportType('financial')}
@@ -117,7 +186,20 @@ export default function ReportsModule({ currentUser }) {
             )}
           </div>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {reportType === 'inventory' && (
+              <select
+                className="cyber-input"
+                style={{ width: 'auto' }}
+                value={inventoryFilter}
+                onChange={(e) => setInventoryFilter(e.target.value)}
+              >
+                <option value="all">Show: All Stock Items</option>
+                <option value="needs_restock">Show: Needs Restock (&lt; 10)</option>
+                <option value="out_of_stock">Show: Out of Stock Only (0)</option>
+                <option value="low_stock">Show: Low Stock Only (1-9)</option>
+              </select>
+            )}
             <label className="cyber-label" style={{ marginBottom: 0 }}>Report Date:</label>
             <input 
               type="date" 
@@ -140,7 +222,7 @@ export default function ReportsModule({ currentUser }) {
                 <h3 className="cyber-title" style={{ fontSize: '1.2rem' }}>
                   {reportType === 'sales' && 'Sales Register Report'}
                   {reportType === 'cashier_daily' && 'My Daily Z-Report (Shift Totals)'}
-                  {reportType === 'inventory' && 'Stock Valuation Statement'}
+                  {reportType === 'inventory' && 'Stock Quantities & Valuation Statement'}
                   {reportType === 'financial' && 'Income Statement (P&L)'}
                   {reportType === 'shifts' && 'Shift Drawer Audits'}
                 </h3>
@@ -260,20 +342,34 @@ export default function ReportsModule({ currentUser }) {
                     <tr>
                       <th>SKU</th>
                       <th>Product</th>
-                      <th style={{ textAlign: 'right' }}>Cost Price</th>
+                      <th>Category</th>
                       <th style={{ textAlign: 'center' }}>Units in Stock</th>
+                      <th style={{ textAlign: 'center' }}>Status</th>
+                      <th style={{ textAlign: 'right' }}>Cost Price</th>
+                      <th style={{ textAlign: 'right' }}>Retail Price</th>
                       <th style={{ textAlign: 'right' }}>Asset Valuation</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {Array.isArray(reportData) && reportData.map(prod => {
+                    {getFilteredInventory().map(prod => {
                       const valuation = Number(prod.cost_price) * prod.stock_quantity;
+                      const isDepleted = prod.stock_quantity <= 0;
+                      const isLow = prod.stock_quantity > 0 && prod.stock_quantity < 10;
                       return (
                         <tr key={prod.id}>
                           <td>{prod.barcode}</td>
                           <td style={{ fontFamily: 'var(--font-sans)' }}>{prod.name}</td>
+                          <td style={{ fontFamily: 'var(--font-sans)', color: 'var(--text-muted)' }}>{prod.category_name || '—'}</td>
+                          <td style={{ textAlign: 'center', fontWeight: 'bold', color: isDepleted ? '#FF3333' : isLow ? 'var(--alert-orange)' : 'var(--success-lime)' }}>
+                            {prod.stock_quantity}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className={`cyber-badge ${isDepleted || isLow ? 'badge-orange' : 'badge-lime'}`}>
+                              {isDepleted ? 'OUT OF STOCK' : isLow ? 'LOW STOCK' : 'IN STOCK'}
+                            </span>
+                          </td>
                           <td style={{ textAlign: 'right' }}>KES {Number(prod.cost_price).toLocaleString()}</td>
-                          <td style={{ textAlign: 'center' }}>{prod.stock_quantity}</td>
+                          <td style={{ textAlign: 'right' }}>KES {Number(prod.retail_price).toLocaleString()}</td>
                           <td style={{ textAlign: 'right', color: 'var(--accent-cyan)' }}>
                             KES {valuation.toLocaleString()}
                           </td>
